@@ -1,4 +1,4 @@
-from google.cloud.speech_v2 import SpeechClient, RecognitionConfig, StreamingRecognitionConfig, StreamingRecognitionFeatures
+from google.cloud.speech_v2 import SpeechClient, RecognitionConfig, RecognitionFeatures, StreamingRecognitionConfig, StreamingRecognitionFeatures
 from google.cloud.speech_v2.types import cloud_speech, ExplicitDecodingConfig 
 
 from dotenv import load_dotenv
@@ -25,6 +25,7 @@ def transcribe_streaming_v2():
                     if result.alternatives != []:
                         if result.is_final:
                             print("{}".format(result.alternatives[0].transcript))
+                            yield "{}".format(result.alternatives[0].transcript)
                         # else:
                         #     print("Transcrição parcial: {}".format(result.alternatives[0].transcript))  
     except KeyboardInterrupt:
@@ -60,8 +61,9 @@ def audio_stream_generator():
 
     config = RecognitionConfig(
     explicit_decoding_config = ExplicitDecodingConfig(encoding= 1, sample_rate_hertz= 48000, audio_channel_count = 2),
-    model="latest_short",
-    language_codes=["pt-BR"],    
+    model="latest_long",
+    language_codes=["pt-BR"],
+    features= RecognitionFeatures(enable_automatic_punctuation = True, enable_spoken_punctuation = True)    
     )
 
     streaming_config = StreamingRecognitionConfig(
@@ -69,9 +71,9 @@ def audio_stream_generator():
         streaming_features = 
         StreamingRecognitionFeatures(
             enable_voice_activity_events = 1,
-            interim_results = 1, 
+            # interim_results = 1, 
             # voice_activity_timeout = StreamingRecognitionFeatures.VoiceActivityTimeout(speech_end_timeout = "0.500s")
-        )
+        )  
     )
 
     
@@ -98,5 +100,3 @@ def audio_stream_generator():
         stream.stop_stream()
         stream.close()
         p.terminate()
-
-transcribe_streaming_v2()
