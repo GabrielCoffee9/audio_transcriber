@@ -1,43 +1,48 @@
 from google.cloud.speech_v2 import SpeechClient, RecognitionConfig, RecognitionFeatures, StreamingRecognitionConfig, StreamingRecognitionFeatures
-from google.cloud.speech_v2.types import cloud_speech, ExplicitDecodingConfig 
+from google.cloud.speech_v2.types import cloud_speech, ExplicitDecodingConfig
 
 from dotenv import load_dotenv
 import os
 import pyaudiowpatch as pyaudio
+import speech_recognition as sr
+from tkinter import filedialog
 
 load_dotenv()
 
 GCP_PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 
-def transcribe_streaming_v2():
-    # Instantiates a client
+def transcribe_streaming_v2(languague_code: str):
     client = SpeechClient()
-    # Stream audio to the API
+    
     print("Transcrição iniciada...")
+
+    parcial_count = 0
 
     try:
         while True:
-            responses = client.streaming_recognize(requests = audio_stream_generator())
-
-            # Process and print the transcribed text
+            responses = client.streaming_recognize(requests = audio_stream_generator(languague_code))
+           
             for response in responses:
                 for result in response.results:
                     if result.alternatives != []:
                         if result.is_final:
                             print("{}".format(result.alternatives[0].transcript))
                             yield "{}".format(result.alternatives[0].transcript)
-                        # else:
-                        #     print("Transcrição parcial: {}".format(result.alternatives[0].transcript))  
-    except KeyboardInterrupt:
-        print("Transcrição finalizada.")   
+                        else:
+                            if parcial_count <= 4: 
+                                parcial_count += 1
+                            else:
+                                parcial_count = 0
+                                print("Transcrição parcial: {}".format(result.alternatives[0].transcript))  
+                                yield "{}".format(result.alternatives[0].transcript)
+    finally:
+        print("while responses final")
 
-def audio_stream_generator():
+def audio_stream_generator(languague_code: str):
     p = pyaudio.PyAudio()
 
-    # Get default WASAPI info
     wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
 
-    # Get default WASAPI speakers
     default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
 
     if not default_speakers["isLoopbackDevice"]:
@@ -61,8 +66,8 @@ def audio_stream_generator():
 
     config = RecognitionConfig(
     explicit_decoding_config = ExplicitDecodingConfig(encoding= 1, sample_rate_hertz= 48000, audio_channel_count = 2),
-    model="latest_long",
-    language_codes=["pt-BR"],
+    model="latest_short",
+    language_codes=[languague_code],
     features= RecognitionFeatures(enable_automatic_punctuation = True, enable_spoken_punctuation = True)    
     )
 
@@ -70,9 +75,8 @@ def audio_stream_generator():
         config=config,
         streaming_features = 
         StreamingRecognitionFeatures(
-            enable_voice_activity_events = 1,
-            # interim_results = 1, 
-            # voice_activity_timeout = StreamingRecognitionFeatures.VoiceActivityTimeout(speech_end_timeout = "0.500s")
+            enable_voice_activity_events = True,
+            interim_results = 1, 
         )  
     )
 
@@ -100,3 +104,32 @@ def audio_stream_generator():
         stream.stop_stream()
         stream.close()
         p.terminate()
+
+
+def offline_file_transcribe():
+    try:
+        file_path = filedialog.askopenfilename(title= 'Selecione um arquivo para transcrever', filetypes=[('Audio wav', '*.wav'), ('Audio mp3', '*.mp3')])
+    except Exception as e:
+        return 
+    if(file_path == ''):
+        return
+
+    with sr.AudioFile(file_path) as source:
+        recognizer = sr.Recognizer()
+
+        audio = recognizer.record(source)
+
+        try:
+            text = recognizer.recognize_sphinx(audio)
+
+            save_folder = filedialog.asksaveasfilename(initialfile='transcribe.txt', defaultextension='.txt', filetypes=[('Text', '*.txt')])
+            if save_folder != '':
+                with open(save_folder, "w", encoding="utf-8") as file:
+                    file.write(text)
+                
+                print("Texto transcrito: ", text)
+
+        except sr.UnknownValueError:
+            print("Não foi possível reconhecer a fala.")
+        except sr.RequestError as e:
+            print("Não foi possível acessar o serviço de reconhecimento de fala: {0}".format(e))
